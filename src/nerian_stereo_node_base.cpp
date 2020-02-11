@@ -13,6 +13,7 @@
  *******************************************************************************/
 
 #include "nerian_stereo_node_base.h"
+#include <sensor_msgs/CameraInfo.h>
 
 namespace nerian_stereo {
 
@@ -125,6 +126,14 @@ void StereoNodeBase::init() {
         calibFile = "";
     }
 
+    if (!privateNh.getParam("left_self_calibration_file", leftSelfCalibFile)) {
+        leftSelfCalibFile = "";
+    }
+
+    if (!privateNh.getParam("right_self_calibration_file", rightSelfCalibFile)) {
+        rightSelfCalibFile = "";
+    }
+
     if (!privateNh.getParam("delay_execution", execDelay)) {
         execDelay = 0;
     }
@@ -152,6 +161,10 @@ void StereoNodeBase::init() {
 
     cameraInfoPublisher.reset(new ros::Publisher(getNH().advertise<nerian_stereo::StereoCameraInfo>(
         "/nerian_stereo/stereo_camera_info", 1)));
+    leftCameraInfoPublisher.reset(new ros::Publisher(getNH().advertise<sensor_msgs::CameraInfo>(
+            "/nerian_left/camera_info", 1)));
+    rightCameraInfoPublisher.reset(new ros::Publisher(getNH().advertise<sensor_msgs::CameraInfo>(
+            "/nerian_right/camera_info", 1)));
     cloudPublisher.reset(new ros::Publisher(getNH().advertise<sensor_msgs::PointCloud2>(
         "/nerian_stereo/point_cloud", 5)));
 }
@@ -200,6 +213,14 @@ void StereoNodeBase::processOneImagePair() {
         publishCameraInfo(stamp, imagePair);
     }
 
+    if(leftCameraInfoPublisher != NULL && leftCameraInfoPublisher->getNumSubscribers() > 0) {
+        publishLeftCameraInfo(stamp);
+    }
+
+    if(rightCameraInfoPublisher != NULL && rightCameraInfoPublisher->getNumSubscribers() > 0) {
+        publishRightCameraInfo(stamp);
+    }
+
     // Display some simple statistics
     frameNum++;
     if(stamp.sec != lastLogTime.sec) {
@@ -214,12 +235,14 @@ void StereoNodeBase::processOneImagePair() {
 }
 
 void StereoNodeBase::loadCameraCalibration() {
-    if(calibFile == "" ) {
+    if(calibFile == "" || leftSelfCalibFile=="" || rightSelfCalibFile=="") {
         ROS_WARN("No camera calibration file configured. Cannot publish detailed camera information!");
     } else {
         bool success = false;
         try {
-            if (calibStorage.open(calibFile, cv::FileStorage::READ)) {
+            if (calibStorage.open(calibFile, cv::FileStorage::READ)
+            && leftSelfCalibStorage.open(leftSelfCalibFile, cv::FileStorage::READ)
+            && rightSelfCalibStorage.open(rightSelfCalibFile, cv::FileStorage::READ)) {
                 success = true;
             }
         } catch(...) {
@@ -240,7 +263,11 @@ void StereoNodeBase::publishImageMsg(const ImagePair& imagePair, int imageIndex,
     }
 
     cv_bridge::CvImage cvImg;
-    cvImg.header.frame_id = frame;
+    if(imageIndex == 0)
+        cvImg.header.frame_id = "nerian_left";
+    else
+        cvImg.header.frame_id = "nerian_right";
+
     cvImg.header.stamp = stamp;
     cvImg.header.seq = imagePair.getSequenceNumber(); // Actually ROS will overwrite this
 
@@ -579,7 +606,6 @@ void StereoNodeBase::publishCameraInfo(ros::Time stamp, const ImagePair& imagePa
     if(camInfoMsg == NULL) {
         // Initialize the camera info structure
         camInfoMsg.reset(new nerian_stereo::StereoCameraInfo);
-
         camInfoMsg->header.frame_id = frame;
         camInfoMsg->header.seq = imagePair.getSequenceNumber(); // Actually ROS will overwrite this
 
@@ -648,10 +674,94 @@ void StereoNodeBase::publishCameraInfo(ros::Time stamp, const ImagePair& imagePa
     }
 }
 
+void StereoNodeBase::publishLeftCameraInfo(ros::Time stamp) {
+    sensor_msgs::CameraInfo leftCameraInfoMsg;
+    if(leftSelfCalibFile != "") {
+        int image_width;
+        int image_height;
+        std::string camera_model;
+        std::string distortion_model;
+        leftSelfCalibStorage["image_width"] >> image_width;
+        leftSelfCalibStorage["image_height"] >> image_height;
+        leftSelfCalibStorage["camera_model"] >> camera_model;
+        leftSelfCalibStorage["distortion_model"] >> distortion_model;
+
+        leftCameraInfoMsg.width = image_width;
+        leftCameraInfoMsg.height = image_height;
+        leftCameraInfoMsg.distortion_model = "plumb_bob";
+        leftSelfCalibStorage["D"] >> leftCameraInfoMsg.D;
+        readSelfLeftCalibrationArray("K", leftCameraInfoMsg.K);
+        readSelfLeftCalibrationArray("P", leftCameraInfoMsg.P);
+        readSelfLeftCalibrationArray("R", leftCameraInfoMsg.R);
+        leftCameraInfoMsg.binning_x = 1;
+        leftCameraInfoMsg.binning_y = 1;
+        leftCameraInfoMsg.roi.do_rectify = false;
+        leftCameraInfoMsg.roi.height = 0;
+        leftCameraInfoMsg.roi.width = 0;
+        leftCameraInfoMsg.roi.x_offset = 0;
+        leftCameraInfoMsg.roi.y_offset = 0;
+        leftCameraInfoMsg.header.frame_id = "nerian_left";
+        leftCameraInfoMsg.header.stamp = stamp;
+        leftCameraInfoPublisher->publish(leftCameraInfoMsg);
+    }
+}
+
+void StereoNodeBase::publishRightCameraInfo(ros::Time stamp) {
+    sensor_msgs::CameraInfo rightCameraInfoMsg;
+    if(rightSelfCalibFile != "") {
+        int image_width;
+        int image_height;
+        std::string camera_model;
+        std::string distortion_model;
+        rightSelfCalibStorage["image_width"] >> image_width;
+        rightSelfCalibStorage["image_height"] >> image_height;
+        rightSelfCalibStorage["camera_model"] >> camera_model;
+        rightSelfCalibStorage["distortion_model"] >> distortion_model;
+
+        rightCameraInfoMsg.width = image_width;
+        rightCameraInfoMsg.height = image_height;
+        rightCameraInfoMsg.distortion_model = "plumb_bob";
+        rightSelfCalibStorage["D"] >> rightCameraInfoMsg.D;
+        readSelfRightCalibrationArray("K", rightCameraInfoMsg.K);
+        readSelfRightCalibrationArray("P", rightCameraInfoMsg.P);
+        readSelfRightCalibrationArray("R", rightCameraInfoMsg.R);
+        rightCameraInfoMsg.binning_x = 1;
+        rightCameraInfoMsg.binning_y = 1;
+        rightCameraInfoMsg.roi.do_rectify = false;
+        rightCameraInfoMsg.roi.height = 0;
+        rightCameraInfoMsg.roi.width = 0;
+        rightCameraInfoMsg.roi.x_offset = 0;
+        rightCameraInfoMsg.roi.y_offset = 0;
+        rightCameraInfoMsg.header.frame_id = "nerian_left";
+        rightCameraInfoMsg.header.stamp = stamp;
+        rightCameraInfoPublisher->publish(rightCameraInfoMsg);
+    }
+}
+
 template<class T> void StereoNodeBase::readCalibrationArray(const char* key, T& dest) {
     std::vector<double> doubleVec;
     calibStorage[key] >> doubleVec;
 
+    if(doubleVec.size() != dest.size()) {
+        std::runtime_error("Calibration file format error!");
+    }
+
+    std::copy(doubleVec.begin(), doubleVec.end(), dest.begin());
+}
+
+template<class T> void StereoNodeBase::readSelfLeftCalibrationArray(const char* key, T& dest) {
+    std::vector<double> doubleVec;
+    leftSelfCalibStorage[key] >> doubleVec;
+    if(doubleVec.size() != dest.size()) {
+        std::runtime_error("Calibration file format error!");
+    }
+
+    std::copy(doubleVec.begin(), doubleVec.end(), dest.begin());
+}
+
+template<class T> void StereoNodeBase::readSelfRightCalibrationArray(const char* key, T& dest) {
+    std::vector<double> doubleVec;
+    rightSelfCalibStorage[key] >> doubleVec;
     if(doubleVec.size() != dest.size()) {
         std::runtime_error("Calibration file format error!");
     }

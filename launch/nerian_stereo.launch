@@ -4,7 +4,8 @@
 
     <!-- Configure the destination where the calibration will saved -->
     <arg name="calib_file" default="/tmp/nerian_calib.yaml" />
-
+    <arg name="left_self_calib_file" default="$(find nerian_stereo)/calib/nerian_passthru_kalibr_left.yaml" />
+    <arg name="right_self_calib_file" default="$(find nerian_stereo)/calib/nerian_passthru_kalibr_right.yaml" />
     <!-- Configure the name of the ROS node -->
     <arg name="node_name" default="nerian_stereo_node" />
 
@@ -34,9 +35,23 @@
         <param name="remote_port" type="string" value="7681" />
 
         <param name="calibration_file" type="string" value="$(arg calib_file)"/>
+        <param name="left_self_calibration_file" type="string" value="$(arg left_self_calib_file)"/>
+        <param name="right_self_calibration_file" type="string" value="$(arg right_self_calib_file)"/>
         <param name="frame" type="string" value="map" />
 
         <param name="delay_execution" type="double" value="2" />
         <param name="max_depth" type="double" value="-1" />
+    </node>
+    
+    
+    <!-- image_proc for left and right cameras -->
+    <node name="image_proc_left" pkg="image_proc" type="image_proc" ns="nerian_left">
+	<remap from="image_raw" to="/nerian_stereo/left_image"/>
+	<remap from="camera_info" to="/nerian_left/camera_info"/>
+    </node>
+
+    <node name="image_proc_right" pkg="image_proc" type="image_proc" ns="nerian_right">
+	<remap from="image_raw" to="/nerian_stereo/right_image"/>
+	<remap from="camera_info" to="/nerian_right/camera_info"/>
     </node>
 </launch>

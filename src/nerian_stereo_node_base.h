@@ -103,6 +103,8 @@ private:
     boost::scoped_ptr<ros::Publisher> leftImagePublisher;
     boost::scoped_ptr<ros::Publisher> rightImagePublisher;
     boost::scoped_ptr<ros::Publisher> cameraInfoPublisher;
+    boost::scoped_ptr<ros::Publisher> leftCameraInfoPublisher;
+    boost::scoped_ptr<ros::Publisher> rightCameraInfoPublisher;
 
     // ROS dynamic_reconfigure
     boost::scoped_ptr<dynamic_reconfigure::Server<nerian_stereo::NerianStereoConfig>> dynReconfServer;
@@ -122,6 +124,8 @@ private:
     std::string frame;
     std::string remoteHost;
     std::string calibFile;
+    std::string leftSelfCalibFile;
+    std::string rightSelfCalibFile;
     double execDelay;
     double maxDepth;
     bool useQFromCalibFile;
@@ -134,6 +138,8 @@ private:
     cv::Mat_<cv::Vec3b> colDispMap;
     sensor_msgs::PointCloud2Ptr pointCloudMsg;
     cv::FileStorage calibStorage;
+    cv::FileStorage leftSelfCalibStorage;
+    cv::FileStorage rightSelfCalibStorage;
     nerian_stereo::StereoCameraInfoPtr camInfoMsg;
     ros::Time lastCamInfoPublish;
 
@@ -186,12 +192,15 @@ private:
      * \brief Publishes the camera info once per second
      */
     void publishCameraInfo(ros::Time stamp, const ImagePair& imagePair);
+    void publishLeftCameraInfo(ros::Time stamp);
+    void publishRightCameraInfo(ros::Time stamp);
 
     /**
      * \brief Reads a vector from the calibration file to a boost:array
      */
     template<class T> void readCalibrationArray(const char* key, T& dest);
-    
+    template<class T> void readSelfLeftCalibrationArray(const char* key, T& dest);
+    template<class T> void readSelfRightCalibrationArray(const char* key, T& dest);
     /*
      * \brief Callback that receives an updated configuration from ROS; internally uses autogen_dynamicReconfigureCallback
      */

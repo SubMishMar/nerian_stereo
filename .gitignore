@@ -3,3 +3,5 @@
 src/nerian_stereo/
 cfg/cpp/nerian_stereo/
 autogen_*
+*.idea/
+*cmake-build-debug
